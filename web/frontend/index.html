@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LocFuzz · JS 引擎漏洞感知模糊测试</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="bg-grid"></div>
+
+  <header class="hero">
+    <div class="hero-left">
+      <div class="logo">
+        <svg viewBox="0 0 64 64" width="34" height="34" aria-hidden="true">
+          <defs>
+            <linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#ffffff"/>
+              <stop offset="1" stop-color="#d8e6ff"/>
+            </linearGradient>
+          </defs>
+          <path d="M32 4 56 18v28L32 60 8 46V18z" fill="none" stroke="url(#lg)" stroke-width="4" stroke-linejoin="round"/>
+          <circle cx="32" cy="33" r="13" fill="none" stroke="url(#lg)" stroke-width="3"/>
+          <path d="M32 14v6M32 46v6M13 33h6M45 33h6" stroke="url(#lg)" stroke-width="3" stroke-linecap="round"/>
+          <path d="M35 22 26 35h6.5l-2 9L41 30h-6.5z" fill="url(#lg)"/>
+        </svg>
+      </div>
+      <div>
+        <h1 class="logo-title">Loc<span>Fuzz</span></h1>
+        <div class="logo-sub">JavaScript 引擎漏洞感知模糊测试 · LLM 语义制导的变异位置选择</div>
+      </div>
+    </div>
+    <div class="hero-right">
+      <div class="pill" id="backend-pill"><span class="dot" id="backend-dot"></span><span id="backend-info">连接中…</span></div>
+      <div class="pill pill-ghost" id="engine-pill">V8 · —</div>
+    </div>
+  </header>
+
+  <!-- 全局统计仪表盘 -->
+  <section class="stats-strip" id="stats-strip">
+    <div class="stat"><div class="stat-v" id="st-jobs">0</div><div class="stat-k">任务总数</div><div class="stat-sub" id="st-running-sub">运行中 0</div></div>
+    <div class="stat"><div class="stat-v" id="st-cases">0</div><div class="stat-k">变异用例</div></div>
+    <div class="stat"><div class="stat-v ok" id="st-valid">0%</div><div class="stat-k">平均有效性 <span class="info-mark" title="所有已完成任务的变异用例中，能被 JS 引擎正常解析执行（非语法错误、未超时/崩溃）的平均比例">ⓘ</span></div></div>
+    <div class="stat"><div class="stat-v" id="st-jaccard">0%</div><div class="stat-k">平均 Jaccard <span class="info-mark" title="变异前后覆盖函数集合的平均重合度（交集÷并集）；越接近 100%，变异越贴合原漏洞执行路径">ⓘ</span></div></div>
+    <div class="stat"><div class="stat-v" id="st-editsim">0%</div><div class="stat-k">平均 EditSim <span class="info-mark" title="变异前后函数调用序列的平均编辑距离相似度；越高说明原漏洞的触发时序保留得越完整">ⓘ</span></div></div>
+    <div class="stat"><div class="stat-v warn" id="st-crashes">0</div><div class="stat-k">崩溃/超时捕获 <span class="info-mark" title="所有任务累计捕获的崩溃与卡死（超时）用例数，是疑似漏洞触发的重点分析对象">ⓘ</span></div></div>
+  </section>
+
+  <!-- LLM 流水线 -->
+  <div class="pipeline">
+    <span class="pipe-step">种子 PoC</span><span class="pipe-arrow">→</span>
+    <span class="pipe-step pipe-llm">① LLM 语义分析</span><span class="pipe-arrow">→</span>
+    <span class="pipe-step pipe-llm">② 变异位置选择</span><span class="pipe-arrow">→</span>
+    <span class="pipe-step pipe-llm">③ LLM 定向变异</span><span class="pipe-arrow">→</span>
+    <span class="pipe-step">Node.js (V8) 执行</span><span class="pipe-arrow">→</span>
+    <span class="pipe-step">行为相似度评估</span>
+    <span class="pipe-scan"></span>
+  </div>
+
+  <main>
+    <!-- ① 任务发起 -->
+    <section class="card">
+      <h2><span class="card-no">01</span>发起模糊测试</h2>
+      <form id="start-form">
+        <div class="seed-panel">
+          <div class="seed-modes">
+            <label class="mode-opt">
+              <input type="radio" name="seed-mode" value="default" checked>
+              <span class="mode-name">默认配置 <span class="info-mark" title="一键使用全部 8 个内置种子，覆盖 8 类不同的历史漏洞模式，无需手动选择">ⓘ</span></span>
+              <span class="mode-desc">一键使用全部内置种子 PoC</span>
+            </label>
+            <label class="mode-opt">
+              <input type="radio" name="seed-mode" value="custom">
+              <span class="mode-name">自定义选择 <span class="info-mark" title="按需勾选内置种子，或上传自己的漏洞样本；上传的种子存入「我的种子库」，与内置种子隔离，可随时删除">ⓘ</span></span>
+              <span class="mode-desc">勾选种子，或上传自己的种子文件</span>
+            </label>
+          </div>
+          <div id="seed-picker" hidden>
+            <div class="seed-cols">
+              <div class="seed-group">
+                <div class="seed-group-title">🧬 内置种子库 <span class="muted" id="builtin-count"></span> <span class="info-mark" title="每一个种子对应一类真实 JS 引擎历史漏洞模式（JIT 类型混淆、边界检查消除等），是定向变异的高质量起点；悬停单个种子可查看其漏洞模式">ⓘ</span></div>
+                <div class="seed-list" id="builtin-list"></div>
+              </div>
+              <div class="seed-group">
+                <div class="seed-group-title">📂 我的种子 <span class="muted" id="user-count"></span> <span class="info-mark" title="你自己上传的漏洞样本或疑似 PoC：LLM 会在其附近做定向变异，挖掘同类漏洞变体；与内置种子隔离存放，可随时删除">ⓘ</span></div>
+                <div class="seed-list" id="user-list"></div>
+                <label class="file-label">
+                  <input type="file" id="seed-upload" accept=".js">
+                  <span class="btn btn-ghost btn-sm">⬆ 上传种子（存入我的种子库）</span>
+                </label>
+              </div>
+            </div>
+            <details class="metric-help">
+              <summary>📖 种子说明（点击展开）</summary>
+              <ul>
+                <li><b>默认配置</b>：一键使用全部 8 个内置种子 PoC，覆盖 8 类不同的历史漏洞模式（类型混淆、边界检查、原型链访问、资源耗尽等典型缺陷面），推荐首次体验直接使用。</li>
+                <li><b>自定义选择</b>：按需勾选内置种子，或上传自己的漏洞样本（存入「我的种子库」，与内置种子隔离，可随时删除）。</li>
+                <li><b>内置种子</b>：每一个都对应一类真实 JS 引擎历史漏洞模式（JIT 类型混淆、边界检查消除、原型链动态访问等），是 fuzz 起点的高质量样本。</li>
+                <li><b>我的种子</b>：可放入你自己的疑似漏洞代码或 PoC，LLM 会在其附近做定向变异挖掘同类变体。</li>
+              </ul>
+            </details>
+          </div>
+        </div>
+        <div class="form-row">
+          <label>每种子变异数 <span class="info-mark" title="每个种子由 LLM 生成的变异用例数量：数量越多，漏洞模式探索越充分，任务总耗时也相应越长。首次体验建议 3~5，深度测试可用 10~20">ⓘ</span>
+            <input type="number" id="per-seed" value="5" min="1" max="200" required>
+          </label>
+          <label>单用例超时 (ms) <span class="info-mark" title="判定用例「卡死」的时间阈值：过短可能把慢速用例误判为卡死，过长会让卡死用例拖慢整体进度。常规 3000，复杂 PoC 建议 5000~10000">ⓘ</span>
+            <input type="number" id="timeout" value="3000" min="1000" max="60000" step="500" required>
+          </label>
+          <button type="submit" class="btn btn-primary" id="start-btn">⚡ 开始模糊测试</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- ② 任务监控 -->
+    <section class="card">
+      <h2><span class="card-no">02</span>任务监控 <button class="btn btn-ghost btn-sm" id="refresh-btn">刷新</button></h2>
+      <table class="job-table">
+        <thead>
+          <tr>
+            <th>任务 ID</th><th>创建时间</th><th>种子</th><th>状态</th>
+            <th>进度</th><th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="job-tbody">
+          <tr><td colspan="6" class="empty">暂无任务</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ③ 结果展示 -->
+    <section class="card" id="result-card" hidden>
+      <h2><span class="card-no">03</span>任务结果 <span id="result-job-id" class="muted"></span>
+        <a class="btn btn-ghost btn-sm" id="export-btn" href="#" download>⬇ 导出 JSON</a>
+      </h2>
+
+      <div class="gauge-row" id="gauge-row"></div>
+
+      <details class="metric-help">
+        <summary>📖 指标说明（点击展开）</summary>
+        <ul>
+          <li><b>用例有效性</b>：LLM 生成的变异代码中，能被 JS 引擎正常解析并执行（非语法错误、未超时/崩溃）的比例。越高说明 LLM 定向变异越精准、不破坏代码结构。</li>
+          <li><b>Jaccard 相似度</b>：变异前后<b>覆盖函数集合</b>的重合度（交集 ÷ 并集）。越接近 100%，说明变异保留了原漏洞样本的执行路径。</li>
+          <li><b>EditSim 相似度</b>：变异前后<b>函数调用序列</b>的编辑距离相似度。越高说明变异没有打乱原漏洞的触发时序。</li>
+          <li><b>两项相似度共同回答</b>：变异是否"换汤不换药"地在原漏洞附近探索——这是挖漏洞变体的关键。</li>
+          <li><b>LLM 延迟</b>：每次调用大模型完成"语义分析 + 位置选择 + 变异"的耗时（毫秒）。</li>
+        </ul>
+      </details>
+
+      <div class="result-cols">
+        <div>
+          <h3>执行状态分布</h3>
+          <div class="donut-wrap">
+            <canvas id="donut" width="180" height="180"></canvas>
+            <div class="donut-legend" id="donut-legend"></div>
+          </div>
+        </div>
+        <div>
+          <h3>崩溃 / 超时用例 <span class="muted">疑似漏洞触发，重点人工分析</span></h3>
+          <table class="data-table">
+            <thead><tr><th>用例</th><th>状态</th><th>错误</th><th>下载</th></tr></thead>
+            <tbody id="crash-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <h3>用例记录 <span class="muted">按种子分组合集，点击组头展开用例明细；点击单行查看变异代码与 LLM 位置选择详情</span></h3>
+      <table class="data-table records">
+        <thead>
+          <tr><th>种子</th><th>#</th><th>状态</th><th>有效</th>
+              <th title="变异前后覆盖函数集合的交并比；越接近 100% 说明变异保留了原漏洞的执行路径">Jaccard ⓘ</th>
+              <th title="变异前后函数调用序列的编辑距离相似度；越高说明触发时序未被破坏">EditSim ⓘ</th>
+              <th title="单次 LLM 语义分析 + 位置选择 + 变异的耗时（毫秒）">LLM 延迟 ⓘ</th>
+              <th>LLM 变异位置与策略</th></tr>
+        </thead>
+        <tbody id="record-tbody"></tbody>
+      </table>
+    </section>
+  </main>
+
+  <!-- 用例详情抽屉 -->
+  <div class="modal-mask" id="modal-mask" hidden>
+    <div class="modal">
+      <div class="modal-head">
+        <div>
+          <div class="modal-title" id="modal-title">用例</div>
+          <div class="modal-badges" id="modal-badges"></div>
+        </div>
+        <div>
+          <a class="btn btn-ghost btn-sm" id="modal-download" href="#" download>⬇ 下载</a>
+          <button class="btn btn-ghost btn-sm" onclick="closeModal()">✕ 关闭</button>
+        </div>
+      </div>
+      <div class="modal-info" id="modal-info"></div>
+      <pre class="code-view"><code id="modal-code"></code></pre>
+    </div>
+  </div>
+
+  <div class="toast-box" id="toast-box"></div>
+
+  <footer class="foot">LocFuzz · 面向 JavaScript 引擎漏洞挖掘的 LLM 引导模糊测试平台</footer>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
