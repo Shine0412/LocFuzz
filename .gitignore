@@ -1,0 +1,14 @@
+# 密钥与本地产物不进版本库
+.secret/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# 运行产物与任务数据
+results/
+web/backend/data/
+
+# 打包/临时文件
+*.tar.gz
+*.zip
+.DS_Store

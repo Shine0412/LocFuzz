@@ -1,0 +1,40 @@
+# LocFuzz 全栈一键编排（本地联调便利；生产可分别 docker run 两个镜像）
+# 用法（在 code/ 目录下）：
+#   docker compose up -d --build
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: web/backend/Dockerfile
+    image: locfuzz-backend
+    container_name: locfuzz-backend
+    ports:
+      - "6024:6024"
+    environment:
+      BACKEND_PORT: 6024
+      CORS_ORIGINS: "*"          # 集成期改为前端实际地址，逗号分隔
+      LOC_FUZZ_DATA_DIR: /data
+      # 密钥不注入环境变量：随 .secret/DeepSeek_key.txt 直接读取
+      LOC_FUZZ_BASE_URL: ${LOC_FUZZ_BASE_URL:-https://api.deepseek.com/v1}
+      LOC_FUZZ_MODEL: ${LOC_FUZZ_MODEL:-deepseek-chat}
+    volumes:
+      - fuzzdata:/data
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: web/frontend/Dockerfile
+    image: locfuzz-frontend
+    container_name: locfuzz-frontend
+    ports:
+      - "6023:80"
+    environment:
+      # 浏览器直连后端用的地址：本机调试用 localhost，设备上用设备 IP
+      BACKEND_URL: ${BACKEND_URL:-http://localhost:6024}
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  fuzzdata:

@@ -1,0 +1,6 @@
+# 构建上下文为 code/，以下产物不进入镜像
+web/backend/data
+results
+**/__pycache__
+**/*.pyc
+**/.pytest_cache

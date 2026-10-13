@@ -1,0 +1,2 @@
+# 统一使用 LF 行尾（项目部署目标是 Linux 容器，防止 Windows 克隆者带出 CRLF 破坏 entrypoint.sh）
+* text=auto eol=lf
