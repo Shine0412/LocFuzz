@@ -23,15 +23,20 @@ code/
 │       ├── promote_system.txt   # system 提示词
 │       └── promote_user.txt     # user 提示词
 ├── seeds/                   # 内置种子用例（.js）
-├── seeds_user/              # 用户通过 Web 上传的自定义种子（与内置隔离）
-├── results/                 # 运行产物（用例 + results.json）
+├── seeds_user/              # 用户通过 Web 上传的自定义种子（运行时自动生成，与内置隔离）
+├── results/                 # 运行产物（用例 + results.json，运行时自动生成）
 ├── web/                     # 前后端分离实现（见下文「Web 服务化部署」）
 ├── .secret/                 # API 密钥（不进版本库）
+├── .gitignore               # 排除密钥与产物（.secret/、results/ 等）
+├── .gitattributes           # 统一 LF 行尾
 ├── .dockerignore            # 排除产物与缓存，不进入镜像
 ├── docker-compose.yml       # 全栈一键编排
 ├── requirements.txt
 └── README.md
 ```
+
+> 注：`seeds_user/` 与 `results/` 不进版本库，由后端在首次运行/上传时自动创建；
+> `.secret/` 只存在于部署机上。
 
 ## 运行
 
@@ -56,8 +61,8 @@ API 密钥直接读取 `code/.secret/DeepSeek_key.txt`，无需任何环境变�
   ...
 
 ===== 汇总 =====
-用例总数        : 30
-用例有效性    : 100.00%  {'ok': 30}
+用例总数        : 80
+用例有效性    : 100.00%  {'ok': 80}
 Jaccard 相似度: 100.00%
 EditSim 相似度: 79.80%
 崩溃/超时用例   : N 个（详见 results.json）
@@ -156,7 +161,9 @@ web/
 └── frontend/           # 静态单页（nginx 托管）
     ├── index.html      #   发起任务 / 任务监控 / 结果展示 三区
     ├── app.js
+    ├── style.css
     ├── config.js       #   后端地址占位符，启动时按 BACKEND_URL 注入
+    ├── favicon.svg
     ├── nginx.conf
     ├── entrypoint.sh
     └── Dockerfile
