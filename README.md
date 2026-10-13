@@ -26,8 +26,8 @@ code/
 ├── seeds_user/              # 用户通过 Web 上传的自定义种子（运行时自动生成，与内置隔离）
 ├── results/                 # 运行产物（用例 + results.json，运行时自动生成）
 ├── web/                     # 前后端分离实现（见下文「Web 服务化部署」）
-├── .secret/                 # API 密钥（不进版本库）
-├── .gitignore               # 排除密钥与产物（.secret/、results/ 等）
+├── .secret/                 # API 密钥目录（仅 DeepSeek_key.txt 空占位入库，密钥自行填入）
+├── .gitignore               # 排除密钥与产物（.secret/ 仅放行空占位文件、results/ 等）
 ├── .gitattributes           # 统一 LF 行尾
 ├── .dockerignore            # 排除产物与缓存，不进入镜像
 ├── docker-compose.yml       # 全栈一键编排
@@ -36,7 +36,7 @@ code/
 ```
 
 > 注：`seeds_user/` 与 `results/` 不进版本库，由后端在首次运行/上传时自动创建；
-> `.secret/` 只存在于部署机上。
+> `.secret/` 中只有空的 `DeepSeek_key.txt` 占位文件入库，真实密钥由部署者自行写入，切勿提交。
 
 ## 运行
 
@@ -197,6 +197,7 @@ cd web/frontend && python -m http.server 6023               # 前端
 > 本地开发无需改配置：`config.js` 中的占位符未被替换时会自动回退为
 > 「当前访问主机 + 6024」，本机访问即 `localhost:6024`。
 
-> 密钥说明：后端直接读取 `code/.secret/DeepSeek_key.txt`，
-> 部署时保证该文件随 `code/` 一同拷贝（`.gitignore`/`.dockerignore`
-> 均不排除 `.secret/`）；容器需能访问外网 DeepSeek API。
+> 密钥说明：仓库自带 `code/.secret/DeepSeek_key.txt` **空占位文件**——克隆/部署后
+> 把自己的 DeepSeek API 密钥写入该文件（单行、无多余空白）即可，后端启动时直接
+> 读取，无需环境变量；也可用 `LOC_FUZZ_API_KEY` 环境变量覆盖。`.gitignore` 只放行
+> 这一个占位文件，**请勿把真实密钥提交进版本库**。容器需能访问外网 DeepSeek API。

@@ -1,5 +1,6 @@
-# 密钥与本地产物不进版本库
-.secret/
+# 密钥与本地产物不进版本库（.secret/ 仅保留空占位文件，见 .secret/DeepSeek_key.txt）
+.secret/*
+!.secret/DeepSeek_key.txt
 __pycache__/
 *.pyc
 .pytest_cache/
